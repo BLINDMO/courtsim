@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Scale, ArrowRight } from 'lucide-react';
 import { callClaude } from '../../api.js';
-import { counselSystem, counselName, closingUser } from '../prompts.js';
+import { counselSystem, closingUser } from '../prompts.js';
 import { CourtLoading, CourtError, SectionTitle, InfoTip } from '../../components/ui.jsx';
 
 function oppName(caseData, side) {
