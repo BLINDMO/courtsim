@@ -31,27 +31,46 @@ progress is saved to `localStorage` so you can resume between sessions.
 
 ## AI integration
 
-The app calls the Anthropic Messages API directly via `fetch` (see `src/api.js`), using
-`claude-haiku-4-5-20251001` to keep cost minimal (≈8–12 calls per full trial). Authentication
-is handled by the host platform — no API key is embedded in the client. All AI responses are
-cached in the trial state so the same content is never re-requested.
+The app talks to the Anthropic Messages API through `src/api.js`, using
+`claude-haiku-4-5-20251001` to keep cost minimal (≈8–12 calls per full trial). All AI
+responses are cached in the trial state so the same content is never re-requested.
 
-## Run locally
+There are two transports, chosen automatically:
+
+- **Platform** — a direct `fetch` to `api.anthropic.com`. The Claude artifact/host platform
+  intercepts this and injects authentication, so no API key is needed.
+- **Proxy** — a same-origin `POST /api/messages` handled by the bundled server middleware
+  (`server/proxy-middleware.js`), which adds your `ANTHROPIC_API_KEY` **server-side**. This is
+  what makes the app work **outside the platform**. The browser never sees the key.
+
+On the platform the direct call is used; on `localhost` (or with `VITE_FORCE_PROXY=true`) the
+proxy is used. The first working transport is remembered for the session.
+
+## Run locally (standalone, outside the platform)
 
 ```bash
 npm install
-npm run dev      # start the dev server (http://localhost:5173)
-npm run build    # production build into dist/
-npm run preview  # preview the production build
+cp .env.example .env          # then put your ANTHROPIC_API_KEY in .env
+
+npm run dev                   # dev server with proxy at http://localhost:5173
+# — or —
+npm run build && npm start    # production build served by server.js (http://localhost:4173)
+npm run preview               # preview the build (also proxies /api/messages)
 ```
+
+The proxy reads `ANTHROPIC_API_KEY` from the environment or a local `.env` file. Without a key
+the AI calls return a graceful "Court Reporter Technical Difficulty" message.
 
 The app ships an inline PWA manifest (with a gavel icon) so it can be installed on mobile.
 
 ## Project structure
 
 ```
+server.js             Standalone production server (static dist/ + proxy)
+server/
+  proxy-middleware.js Same-origin Anthropic proxy (injects the key server-side)
 src/
-  api.js              Anthropic API client + JSON extraction
+  api.js              Anthropic API client (platform + proxy transports)
   cases.js            All 20 fully-authored cases
   glossary.js         Plain-English legal-concept tooltips
   storage.js          localStorage save/load
