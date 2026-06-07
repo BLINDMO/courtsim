@@ -1,0 +1,11 @@
+name: Smoke Test
+on:
+  workflow_dispatch:
+  push:
+    branches: ['claude/trial-by-argument-build-3MCYB']
+    paths: ['.github/workflows/smoke.yml']
+jobs:
+  hello:
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo "actions runner is alive"
