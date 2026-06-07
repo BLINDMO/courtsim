@@ -1,43 +1,70 @@
-// Anthropic Messages API integration.
+// AI integration with multiple transports, chosen automatically:
 //
-// Three transports are supported, chosen automatically:
-//   1. PLATFORM — a direct fetch to api.anthropic.com. The Claude artifact/host
-//      platform intercepts this and injects authentication; no API key needed.
-//   2. PROXY — a same-origin POST to /api/messages, handled by the bundled
-//      server middleware (see server/proxy-middleware.js), which adds the
-//      ANTHROPIC_API_KEY server-side. Makes the app work OUTSIDE the platform on
-//      any host that runs the server (local dev, `npm run preview`, `npm start`).
-//   3. BYO-KEY — a direct browser call to api.anthropic.com using a key the
-//      visitor stored in their own browser. This is what makes the app work on a
-//      purely static host like GitHub Pages, where there is no server to proxy.
+//   1. PLATFORM  — direct fetch to api.anthropic.com; the Claude artifact/host
+//      platform injects authentication (free, uses your Pro). No key needed.
+//   2. PROXY     — same-origin POST /api/messages handled by the bundled server
+//      (server/proxy-middleware.js); adds ANTHROPIC_API_KEY server-side.
+//   3. BYO-KEY   — direct browser call to Anthropic with a key the visitor stored
+//      in their own browser (for static hosts).
+//   4. GROQ      — direct browser call to Groq's OpenAI-compatible API using a
+//      free Groq key the visitor stored. Runs Llama 3.3 70B etc.
 //
-// Transports are tried in priority order and the first that works is remembered,
-// so there is at most one wasted attempt per session.
+// On the Claude platform no key is set, so PLATFORM is used (free). On the public
+// site the visitor picks a provider + key in the Set API Key panel.
 //
-// Haiku 4.5 is used for every call to keep cost minimal (8-12 calls per trial).
+// Anthropic calls use Haiku 4.5; Groq uses a strong open model. Both are cheap/free
+// and a full trial is only ~8-15 calls (all responses are cached in trial state).
 
-import { getApiKey } from './apikey.js';
+import { getProvider, getKey } from './apikey.js';
 
-const MODEL = 'claude-haiku-4-5-20251001';
+const ANTHROPIC_MODEL = 'claude-haiku-4-5-20251001';
 const PLATFORM_URL = 'https://api.anthropic.com/v1/messages';
 const PROXY_URL = import.meta.env.VITE_PROXY_PATH || '/api/messages';
+
+const GROQ_URL = 'https://api.groq.com/openai/v1/chat/completions';
+const GROQ_MODEL = import.meta.env.VITE_GROQ_MODEL || 'llama-3.3-70b-versatile';
 
 function isLocalHost() {
   if (typeof location === 'undefined') return false;
   return /^(localhost|127\.0\.0\.1|0\.0\.0\.0|\[::1\])$/.test(location.hostname);
 }
 
-// 'platform' | 'proxy' | null (unknown — try both)
+// Remembered fallback transport for the Anthropic platform/proxy pair.
 let preferred = null;
 if (import.meta.env.VITE_FORCE_PROXY === 'true') preferred = 'proxy';
 else if (import.meta.env.VITE_FORCE_PLATFORM === 'true') preferred = 'platform';
 else if (isLocalHost()) preferred = 'proxy';
 
-async function tryEndpoint(mode, payload) {
+async function tryEndpoint(mode, system, user, maxTokens, opts) {
+  // ----- Groq (OpenAI-compatible chat completions) -----
+  if (mode === 'groq') {
+    const key = getKey('groq');
+    if (!key) return { ok: false };
+    const body = {
+      model: GROQ_MODEL,
+      max_tokens: maxTokens,
+      messages: [
+        { role: 'system', content: system },
+        { role: 'user', content: user },
+      ],
+    };
+    if (opts && opts.json) body.response_format = { type: 'json_object' };
+    const res = await fetch(GROQ_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${key}` },
+      body: JSON.stringify(body),
+    });
+    if (!res.ok) return { ok: false };
+    const data = await res.json();
+    const text = data?.choices?.[0]?.message?.content;
+    return text ? { ok: true, text } : { ok: false };
+  }
+
+  // ----- Anthropic (platform / proxy / byo-key) -----
   let url;
   const headers = { 'Content-Type': 'application/json' };
   if (mode === 'byokey') {
-    const key = getApiKey();
+    const key = getKey('anthropic');
     if (!key) return { ok: false };
     url = PLATFORM_URL;
     headers['x-api-key'] = key;
@@ -46,46 +73,37 @@ async function tryEndpoint(mode, payload) {
   } else {
     url = mode === 'platform' ? PLATFORM_URL : PROXY_URL;
   }
-  const response = await fetch(url, {
-    method: 'POST',
-    headers,
-    body: JSON.stringify(payload),
-  });
-  if (!response.ok) return { ok: false };
-  const data = await response.json();
+  const body = {
+    model: ANTHROPIC_MODEL,
+    max_tokens: maxTokens,
+    system,
+    messages: [{ role: 'user', content: user }],
+  };
+  const res = await fetch(url, { method: 'POST', headers, body: JSON.stringify(body) });
+  if (!res.ok) return { ok: false };
+  const data = await res.json();
   const text = data?.content?.[0]?.text;
-  if (!text) return { ok: false };
-  return { ok: true, text };
+  return text ? { ok: true, text } : { ok: false };
 }
 
-export async function callClaude(systemPrompt, userMessage, maxTokens = 700) {
-  const payload = {
-    model: MODEL,
-    max_tokens: maxTokens,
-    system: systemPrompt,
-    messages: [{ role: 'user', content: userMessage }],
-  };
+export async function callClaude(systemPrompt, userMessage, maxTokens = 700, opts = {}) {
+  const provider = getProvider();
+  const order = [];
 
-  // If the visitor supplied their own key, that transport wins (the static-host
-  // case). Otherwise fall back to the remembered/auto-detected order.
-  let order;
-  if (getApiKey()) {
-    order = ['byokey', 'proxy', 'platform'];
-  } else if (preferred === 'proxy') {
-    order = ['proxy', 'platform'];
-  } else if (preferred === 'platform') {
-    order = ['platform', 'proxy'];
-  } else {
-    order = ['platform', 'proxy'];
-  }
+  // Visitor-selected provider + key wins (the static-host case).
+  if (provider === 'groq' && getKey('groq')) order.push('groq');
+  if (getKey('anthropic')) order.push('byokey');
+  // Platform/proxy fallbacks (Claude artifact = platform/free; local server = proxy).
+  if (preferred === 'proxy') order.push('proxy', 'platform');
+  else order.push('platform', 'proxy');
 
+  const seen = new Set();
   for (const mode of order) {
+    if (seen.has(mode)) continue;
+    seen.add(mode);
     try {
-      const result = await tryEndpoint(mode, payload);
-      if (result.ok) {
-        preferred = mode; // remember the working transport
-        return result.text;
-      }
+      const result = await tryEndpoint(mode, systemPrompt, userMessage, maxTokens, opts);
+      if (result.ok) return result.text;
     } catch (err) {
       // network/CORS failure — fall through to the next transport
     }
@@ -93,12 +111,11 @@ export async function callClaude(systemPrompt, userMessage, maxTokens = 700) {
   return '__ERROR__';
 }
 
-// Attempt to extract a JSON object from a model response that may contain
-// stray prose or markdown fences. Returns null if nothing parseable is found.
+// Attempt to extract a JSON object from a model response that may contain stray
+// prose or markdown fences. Returns null if nothing parseable is found.
 export function extractJSON(text) {
   if (!text || text === '__ERROR__') return null;
   let cleaned = text.trim();
-  // Strip ```json ... ``` fences if present.
   cleaned = cleaned.replace(/```(?:json)?/gi, '').trim();
   const start = cleaned.indexOf('{');
   const end = cleaned.lastIndexOf('}');
@@ -107,7 +124,6 @@ export function extractJSON(text) {
   try {
     return JSON.parse(candidate);
   } catch (e) {
-    // Try to repair common smart-quote / trailing-comma issues.
     try {
       candidate = candidate
         .replace(/[“”]/g, '"')

@@ -174,7 +174,8 @@ export default function Verdict({ caseData, side, state, patch, addRecord, onRet
       const text = await callClaude(
         jurySystem(caseData, side, state.admittedEvidence || [], state.suppressedEvidence || []),
         juryUser(caseData, state.transcript, side),
-        1000
+        1000,
+        { json: true }
       );
       const parsed = extractJSON(text);
       const result = parsed && parsed.counts ? parsed : fallbackVerdict(caseData, text);

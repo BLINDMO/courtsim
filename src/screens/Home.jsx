@@ -1,54 +1,102 @@
 import React, { useState } from 'react';
 import { KeyRound, Check } from 'lucide-react';
 import { ScalesIcon, Overlay, CloseButton } from '../components/ui.jsx';
-import { getApiKey, setApiKey, hasApiKey } from '../apikey.js';
+import { getProvider, setProvider, getKey, setKey, hasAnyKey } from '../apikey.js';
+
+const PROVIDERS = {
+  anthropic: {
+    label: 'Anthropic (Claude)',
+    placeholder: 'sk-ant-...',
+    link: 'https://console.anthropic.com/settings/keys',
+    note: 'Pay-as-you-go (cheap — uses the Haiku model). Separate from a Claude Pro plan.',
+  },
+  groq: {
+    label: 'Groq (Llama — free)',
+    placeholder: 'gsk_...',
+    link: 'https://console.groq.com/keys',
+    note: 'Free tier, no credit card required. Fast open models. Rate-limited but plenty for play.',
+  },
+};
 
 function ApiKeyModal({ onClose }) {
-  const [value, setValue] = useState(getApiKey());
+  const [provider, setProv] = useState(getProvider());
+  const [value, setValue] = useState(getKey(getProvider()));
   const [saved, setSaved] = useState(false);
 
+  function switchProvider(p) {
+    setProv(p);
+    setValue(getKey(p));
+    setSaved(false);
+  }
+
   function save() {
-    setApiKey(value);
+    setProvider(provider);
+    setKey(provider, value);
     setSaved(true);
     setTimeout(onClose, 600);
   }
+
+  const cfg = PROVIDERS[provider];
 
   return (
     <Overlay onClose={onClose}>
       <div className="p-6">
         <div className="flex items-center justify-between mb-3">
           <h3 className="font-display text-xl flex items-center gap-2" style={{ color: 'var(--gold)' }}>
-            <KeyRound size={18} /> Anthropic API Key
+            <KeyRound size={18} /> AI Provider &amp; Key
           </h3>
           <CloseButton onClick={onClose} />
         </div>
+
         <p className="font-body text-[14px] mb-4 leading-relaxed" style={{ color: 'var(--text-secondary)' }}>
-          On a hosted static site (like GitHub Pages) there is no server to power the AI, so the
-          trial uses your own Anthropic key. It is stored <span style={{ color: 'var(--gold)' }}>only in this
-          browser</span> and sent directly to Anthropic — never to any other server. Leave this blank if
-          you are running on the Claude platform or your own server.
+          On a hosted static site there is no server to power the AI, so the trial uses a provider
+          key you supply. It is stored <span style={{ color: 'var(--gold)' }}>only in this browser</span> and
+          sent directly to the provider. Leave blank when running inside Claude or on your own server.
         </p>
+
+        {/* Provider segmented control */}
+        <div className="flex gap-2 mb-3">
+          {Object.entries(PROVIDERS).map(([key, p]) => (
+            <button
+              key={key}
+              onClick={() => switchProvider(key)}
+              className="flex-1 font-ui text-[11px] px-3 py-2 tracking-widest uppercase transition-colors"
+              style={{
+                background: provider === key ? 'rgba(201,168,76,0.18)' : 'transparent',
+                color: provider === key ? 'var(--gold-bright)' : 'var(--text-secondary)',
+                border: `1px solid ${provider === key ? 'var(--gold)' : 'var(--border-dim)'}`,
+              }}
+            >
+              {p.label}
+            </button>
+          ))}
+        </div>
+
         <input
           type="password"
           value={value}
           onChange={(e) => setValue(e.target.value)}
-          placeholder="sk-ant-..."
-          className="w-full p-3 text-[14px] font-record mb-3"
+          placeholder={cfg.placeholder}
+          className="w-full p-3 text-[14px] font-record mb-2"
           autoComplete="off"
           spellCheck={false}
         />
+        <p className="font-body text-[12px] mb-3" style={{ color: 'var(--text-dim)' }}>
+          {cfg.note}
+        </p>
+
         <div className="flex items-center justify-between">
           <a
-            href="https://console.anthropic.com/settings/keys"
+            href={cfg.link}
             target="_blank"
             rel="noreferrer"
             className="font-ui text-[11px] tracking-widest uppercase"
             style={{ color: 'var(--text-secondary)' }}
           >
-            Get a key →
+            Get a free key →
           </a>
           <button onClick={save} className="btn-gold px-5 py-2 text-sm flex items-center gap-1.5">
-            {saved ? <><Check size={14} /> Saved</> : 'Save Key'}
+            {saved ? <><Check size={14} /> Saved</> : 'Save'}
           </button>
         </div>
       </div>
@@ -58,7 +106,7 @@ function ApiKeyModal({ onClose }) {
 
 export default function Home({ onBegin, onContinue, hasSave }) {
   const [showKey, setShowKey] = useState(false);
-  const keySet = hasApiKey();
+  const keySet = hasAnyKey();
 
   return (
     <div className="void-grain min-h-screen flex flex-col items-center justify-center px-6 text-center anim-fade">
@@ -96,7 +144,7 @@ export default function Home({ onBegin, onContinue, hasSave }) {
           style={{ color: keySet ? 'var(--teal)' : 'var(--text-secondary)' }}
         >
           <KeyRound size={13} />
-          {keySet ? 'API Key Set' : 'Set API Key'}
+          {keySet ? 'AI Key Set' : 'Set API Key'}
         </button>
       </div>
 
