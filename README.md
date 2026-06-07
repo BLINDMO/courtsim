@@ -65,12 +65,16 @@ The app ships an inline PWA manifest (with a gavel icon) so it can be installed 
 
 ## Deploy to GitHub Pages
 
-A workflow at `.github/workflows/deploy-pages.yml` builds the app and publishes it to
-GitHub Pages on every push to this branch (and `main`). The Vite `base` is set to
-`/courtsim/` for Pages builds.
+The site is published from a prebuilt `gh-pages` branch — no CI required (handy when GitHub
+Actions isn't available on the account). To build and publish:
 
-Once Pages is enabled for the repo (the workflow attempts to enable it automatically; if
-that is blocked, set **Settings → Pages → Source: GitHub Actions** once), the site is live at:
+```bash
+npm run deploy
+```
+
+This builds with `base=/courtsim/` and force-pushes `dist/` to the `gh-pages` branch. Set the
+Pages source **once**: repo **Settings → Pages → Source: "Deploy from a branch" → branch
+`gh-pages`, folder `/ (root)`**. The site is then live at:
 
 > **https://blindmo.github.io/courtsim/**
 
