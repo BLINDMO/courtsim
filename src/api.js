@@ -1,18 +1,22 @@
 // Anthropic Messages API integration.
 //
-// Two transports are supported, chosen automatically:
+// Three transports are supported, chosen automatically:
 //   1. PLATFORM — a direct fetch to api.anthropic.com. The Claude artifact/host
 //      platform intercepts this and injects authentication; no API key needed.
 //   2. PROXY — a same-origin POST to /api/messages, handled by the bundled
 //      server middleware (see server/proxy-middleware.js), which adds the
-//      ANTHROPIC_API_KEY server-side. This is what makes the app work OUTSIDE
-//      the platform (local dev, `npm run preview`, `npm start`, any host).
+//      ANTHROPIC_API_KEY server-side. Makes the app work OUTSIDE the platform on
+//      any host that runs the server (local dev, `npm run preview`, `npm start`).
+//   3. BYO-KEY — a direct browser call to api.anthropic.com using a key the
+//      visitor stored in their own browser. This is what makes the app work on a
+//      purely static host like GitHub Pages, where there is no server to proxy.
 //
-// The two are tried in order and the first that works is remembered, so there is
-// at most one wasted attempt per session. Locally (or with VITE_FORCE_PROXY) the
-// proxy is tried first to avoid a guaranteed cross-origin failure.
+// Transports are tried in priority order and the first that works is remembered,
+// so there is at most one wasted attempt per session.
 //
 // Haiku 4.5 is used for every call to keep cost minimal (8-12 calls per trial).
+
+import { getApiKey } from './apikey.js';
 
 const MODEL = 'claude-haiku-4-5-20251001';
 const PLATFORM_URL = 'https://api.anthropic.com/v1/messages';
@@ -30,10 +34,21 @@ else if (import.meta.env.VITE_FORCE_PLATFORM === 'true') preferred = 'platform';
 else if (isLocalHost()) preferred = 'proxy';
 
 async function tryEndpoint(mode, payload) {
-  const url = mode === 'platform' ? PLATFORM_URL : PROXY_URL;
+  let url;
+  const headers = { 'Content-Type': 'application/json' };
+  if (mode === 'byokey') {
+    const key = getApiKey();
+    if (!key) return { ok: false };
+    url = PLATFORM_URL;
+    headers['x-api-key'] = key;
+    headers['anthropic-version'] = '2023-06-01';
+    headers['anthropic-dangerous-direct-browser-access'] = 'true';
+  } else {
+    url = mode === 'platform' ? PLATFORM_URL : PROXY_URL;
+  }
   const response = await fetch(url, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers,
     body: JSON.stringify(payload),
   });
   if (!response.ok) return { ok: false };
@@ -51,12 +66,18 @@ export async function callClaude(systemPrompt, userMessage, maxTokens = 700) {
     messages: [{ role: 'user', content: userMessage }],
   };
 
-  const order =
-    preferred === 'proxy'
-      ? ['proxy', 'platform']
-      : preferred === 'platform'
-      ? ['platform', 'proxy']
-      : ['platform', 'proxy'];
+  // If the visitor supplied their own key, that transport wins (the static-host
+  // case). Otherwise fall back to the remembered/auto-detected order.
+  let order;
+  if (getApiKey()) {
+    order = ['byokey', 'proxy', 'platform'];
+  } else if (preferred === 'proxy') {
+    order = ['proxy', 'platform'];
+  } else if (preferred === 'platform') {
+    order = ['platform', 'proxy'];
+  } else {
+    order = ['platform', 'proxy'];
+  }
 
   for (const mode of order) {
     try {

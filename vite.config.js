@@ -25,6 +25,10 @@ export default defineConfig(({ mode }) => {
   }
 
   return {
+    // On GitHub Pages the app is served from /<repo>/; locally and on the
+    // standalone server it is served from root. The Pages workflow sets
+    // GITHUB_PAGES=true (and optionally PAGES_BASE to override the repo name).
+    base: process.env.GITHUB_PAGES ? process.env.PAGES_BASE || '/courtsim/' : '/',
     plugins: [react(), anthropicProxyPlugin()],
     server: {
       port: 5173,

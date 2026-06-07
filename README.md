@@ -63,6 +63,23 @@ the AI calls return a graceful "Court Reporter Technical Difficulty" message.
 
 The app ships an inline PWA manifest (with a gavel icon) so it can be installed on mobile.
 
+## Deploy to GitHub Pages
+
+A workflow at `.github/workflows/deploy-pages.yml` builds the app and publishes it to
+GitHub Pages on every push to this branch (and `main`). The Vite `base` is set to
+`/courtsim/` for Pages builds.
+
+Once Pages is enabled for the repo (the workflow attempts to enable it automatically; if
+that is blocked, set **Settings → Pages → Source: GitHub Actions** once), the site is live at:
+
+> **https://blindmo.github.io/courtsim/**
+
+**AI on the live site:** GitHub Pages is static and cannot run the proxy, so the deployed
+app uses **bring-your-own-key** mode — click **Set API Key** on the home screen and paste an
+Anthropic API key. The key is stored only in your browser and sent directly to Anthropic; it
+never touches any other server. Without a key the UI is fully browsable and AI responses show a
+graceful "Court Reporter Technical Difficulty" message.
+
 ## Project structure
 
 ```
