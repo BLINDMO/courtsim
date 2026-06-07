@@ -111,6 +111,35 @@ export async function callClaude(systemPrompt, userMessage, maxTokens = 700, opt
   return '__ERROR__';
 }
 
+// Test that a provider key is valid by making a minimal API call.
+// Returns true on success, false on auth failure or network error.
+export async function testProviderKey(provider, key) {
+  try {
+    if (provider === 'groq') {
+      const res = await fetch(GROQ_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${key}` },
+        body: JSON.stringify({ model: GROQ_MODEL, max_tokens: 1, messages: [{ role: 'user', content: 'Hi' }] }),
+      });
+      return res.ok;
+    } else {
+      const res = await fetch(PLATFORM_URL, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-api-key': key,
+          'anthropic-version': '2023-06-01',
+          'anthropic-dangerous-direct-browser-access': 'true',
+        },
+        body: JSON.stringify({ model: ANTHROPIC_MODEL, max_tokens: 1, system: 'Test', messages: [{ role: 'user', content: 'Hi' }] }),
+      });
+      return res.ok;
+    }
+  } catch {
+    return false;
+  }
+}
+
 // Attempt to extract a JSON object from a model response that may contain stray
 // prose or markdown fences. Returns null if nothing parseable is found.
 export function extractJSON(text) {

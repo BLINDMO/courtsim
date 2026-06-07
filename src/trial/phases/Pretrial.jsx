@@ -29,10 +29,6 @@ function inferSuppressed(motion, caseData) {
   return hits;
 }
 
-function motionGuidance(term) {
-  return null;
-}
-
 export default function Pretrial({ caseData, side, state, patch, addRecord, goToPhase }) {
   const available = caseData.pretrialMotions.available;
   const existing = state.transcript.motionsFiled || [];
@@ -177,7 +173,14 @@ export default function Pretrial({ caseData, side, state, patch, addRecord, goTo
             );
           })}
 
-          <div className="flex justify-end pt-2">
+          <div className="flex items-center justify-between pt-2">
+            <button
+              onClick={() => goToPhase('opening')}
+              className="font-ui text-[11px] uppercase tracking-widest transition-colors"
+              style={{ color: 'var(--text-dim)' }}
+            >
+              Skip (Waive All Motions)
+            </button>
             <button onClick={fileMotions} disabled={!canFile} className="btn-gold px-6 py-3 text-sm">
               FILE ALL MOTIONS
             </button>

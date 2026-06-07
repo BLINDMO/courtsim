@@ -49,10 +49,3 @@ export function hasAnyKey() {
   return !!getKey('anthropic') || !!getKey('groq');
 }
 
-// Backwards-compatible helpers (Anthropic).
-export function getApiKey() {
-  return getKey('anthropic');
-}
-export function hasApiKey() {
-  return hasAnyKey();
-}

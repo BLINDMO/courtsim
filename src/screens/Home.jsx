@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
-import { KeyRound, Check } from 'lucide-react';
+import { KeyRound, Check, Wifi, WifiOff, Loader } from 'lucide-react';
 import { ScalesIcon, Overlay, CloseButton } from '../components/ui.jsx';
 import { getProvider, setProvider, getKey, setKey, hasAnyKey } from '../apikey.js';
+import { testProviderKey } from '../api.js';
 
 const PROVIDERS = {
   anthropic: {
@@ -22,11 +23,13 @@ function ApiKeyModal({ onClose }) {
   const [provider, setProv] = useState(getProvider());
   const [value, setValue] = useState(getKey(getProvider()));
   const [saved, setSaved] = useState(false);
+  const [testStatus, setTestStatus] = useState(null); // null | 'testing' | 'ok' | 'fail'
 
   function switchProvider(p) {
     setProv(p);
     setValue(getKey(p));
     setSaved(false);
+    setTestStatus(null);
   }
 
   function save() {
@@ -34,6 +37,13 @@ function ApiKeyModal({ onClose }) {
     setKey(provider, value);
     setSaved(true);
     setTimeout(onClose, 600);
+  }
+
+  async function testConnection() {
+    if (!value.trim()) return;
+    setTestStatus('testing');
+    const ok = await testProviderKey(provider, value.trim());
+    setTestStatus(ok ? 'ok' : 'fail');
   }
 
   const cfg = PROVIDERS[provider];
@@ -95,18 +105,43 @@ function ApiKeyModal({ onClose }) {
           >
             Get a free key →
           </a>
-          <button onClick={save} className="btn-gold px-5 py-2 text-sm flex items-center gap-1.5">
-            {saved ? <><Check size={14} /> Saved</> : 'Save'}
-          </button>
+          <div className="flex items-center gap-2">
+            {value.trim() && (
+              <button
+                onClick={testConnection}
+                disabled={testStatus === 'testing'}
+                className="font-ui text-[11px] tracking-widest uppercase px-3 py-2 flex items-center gap-1.5 transition-colors"
+                style={{
+                  color: testStatus === 'ok' ? 'var(--teal)' : testStatus === 'fail' ? 'var(--crimson)' : 'var(--text-secondary)',
+                  border: `1px solid ${testStatus === 'ok' ? 'var(--teal-dim)' : testStatus === 'fail' ? 'var(--crimson-dim)' : 'var(--border-dim)'}`,
+                }}
+              >
+                {testStatus === 'testing' ? <><Loader size={12} className="animate-spin" /> Testing…</> :
+                 testStatus === 'ok' ? <><Wifi size={12} /> Connected</> :
+                 testStatus === 'fail' ? <><WifiOff size={12} /> Failed</> :
+                 <><Wifi size={12} /> Test Key</>}
+              </button>
+            )}
+            <button onClick={save} className="btn-gold px-5 py-2 text-sm flex items-center gap-1.5">
+              {saved ? <><Check size={14} /> Saved</> : 'Save'}
+            </button>
+          </div>
         </div>
       </div>
     </Overlay>
   );
 }
 
+function activeProviderLabel() {
+  const p = getProvider();
+  if (getKey(p)) return PROVIDERS[p]?.label.split(' ')[0] + ' Key Active';
+  return null;
+}
+
 export default function Home({ onBegin, onContinue, hasSave }) {
   const [showKey, setShowKey] = useState(false);
   const keySet = hasAnyKey();
+  const providerLabel = activeProviderLabel();
 
   return (
     <div className="void-grain min-h-screen flex flex-col items-center justify-center px-6 text-center anim-fade">
@@ -144,7 +179,7 @@ export default function Home({ onBegin, onContinue, hasSave }) {
           style={{ color: keySet ? 'var(--teal)' : 'var(--text-secondary)' }}
         >
           <KeyRound size={13} />
-          {keySet ? 'AI Key Set' : 'Set API Key'}
+          {keySet ? (providerLabel || 'AI Key Set') : 'Set API Key'}
         </button>
       </div>
 
